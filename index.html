@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <title>Super Mario Sticker Checklist</title>
+    <meta
+      name="description"
+      content="Checklist interactiva para llevar el control de tu álbum de cromos/láminas de Super Mario: conseguidos, faltantes y repetidas."
+    />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script defer src="./app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#stickers">Saltar al listado de cromos</a>
+
+    <header class="app-header">
+      <div class="header-inner">
+        <div class="hero">
+          <div class="hero-media" aria-hidden="true">
+            <img
+              class="hero-img"
+              src="./assets/hero-mario.png"
+              alt=""
+              loading="eager"
+              decoding="async"
+              onerror="this.hidden=true; this.closest('.hero-media').classList.add('hero-fallback')"
+            />
+            <div class="hero-fallback-emoji" aria-hidden="true">⭐️🍄🪙</div>
+          </div>
+
+          <div class="hero-content">
+            <h1 class="app-title">Super Mario Sticker Checklist</h1>
+            <p class="app-subtitle">
+              Marca tus cromos, controla repetidas y mantén tu progreso guardado.
+            </p>
+            <div class="header-badges" aria-label="Secciones oficiales">
+              <span class="badge badge-red">Álbum 001–180</span>
+              <span class="badge badge-blue">Póster M1–M44</span>
+            </div>
+          </div>
+        </div>
+
+        <section class="dashboard" aria-label="Progreso del álbum">
+          <div class="dash-top">
+            <div class="dash-metrics">
+              <div class="metric">
+                <div class="metric-label">Total oficiales</div>
+                <div class="metric-value" id="metricTotal">224</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Conseguidos</div>
+                <div class="metric-value" id="metricHave">0</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Faltantes</div>
+                <div class="metric-value" id="metricMissing">224</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Repetidas</div>
+                <div class="metric-value" id="metricDupes">0</div>
+              </div>
+            </div>
+
+            <div class="dash-summary" aria-live="polite">
+              <div class="summary-line" id="summaryLine">Tienes 0 de 224 cromos</div>
+              <div class="summary-sub">
+                <span id="summaryMissing">Faltan 224</span>
+                <span class="dot" aria-hidden="true">•</span>
+                <span id="summaryDupes">Repetidas: 0</span>
+                <span class="dot" aria-hidden="true">•</span>
+                <span id="summaryPercent">Progreso: 0.0%</span>
+              </div>
+              <div class="sync-row" aria-label="Estado de sincronización">
+                <span class="sync-pill" id="syncStatusPill">Cargando colección…</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="progress-wrap" aria-label="Progreso visual">
+            <div class="progress-meta">
+              <span class="progress-icon" aria-hidden="true">📈</span>
+              <span class="progress-text" id="progressText">0.0%</span>
+            </div>
+            <div class="progress-rail" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+              <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="controls" aria-label="Controles">
+        <div class="controls-row">
+          <div class="search">
+            <label class="label" for="searchInput">Buscar cromo</label>
+            <div class="search-box">
+              <input
+                id="searchInput"
+                class="input"
+                type="search"
+                inputmode="search"
+                autocomplete="off"
+                placeholder="Ej: 045, 45, M12, LE3…"
+              />
+              <button class="btn btn-primary" id="searchBtn" type="button">
+                Buscar / Ir
+              </button>
+              <button class="btn btn-ghost" id="clearSearchBtn" type="button">
+                Limpiar
+              </button>
+            </div>
+            <div class="help" id="searchHelp">
+              Tip: escribe <strong>45</strong> o <strong>045</strong>, y para póster usa
+              <strong>M12</strong>. Extras: <strong>LE3</strong> (si están activados).
+            </div>
+          </div>
+
+          <div class="actions">
+            <div class="actions-group" aria-label="Listas">
+              <div class="label">Listas</div>
+              <div class="btn-row">
+                <button class="btn btn-yellow" id="copyMissingBtn" type="button">
+                  Copiar faltantes
+                </button>
+                <button class="btn btn-yellow" id="copyDupesBtn" type="button">
+                  Copiar repetidas
+                </button>
+              </div>
+            </div>
+
+            <div class="actions-group" aria-label="Progreso">
+              <div class="label">Progreso</div>
+              <div class="btn-row">
+                <button class="btn btn-green" id="exportBtn" type="button">
+                  Exportar progreso
+                </button>
+                <button class="btn btn-blue" id="importBtn" type="button">
+                  Importar progreso
+                </button>
+                <button class="btn btn-danger" id="resetBtn" type="button">
+                  Resetear
+                </button>
+                <input
+                  id="importFile"
+                  type="file"
+                  accept="application/json"
+                  class="sr-only"
+                  tabindex="-1"
+                />
+              </div>
+              <div class="help">
+                Exporta un <strong>JSON</strong> para respaldo o para mover tu progreso a otro
+                dispositivo.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="filters" aria-label="Filtros">
+          <div class="filters-label">
+            <span class="filters-icon" aria-hidden="true">🔎</span>
+            <span>Filtrar</span>
+          </div>
+          <div class="filters-row" role="tablist" aria-label="Opciones de filtro">
+            <button class="chip" type="button" data-filter="all" role="tab">
+              Todos
+            </button>
+            <button class="chip" type="button" data-filter="have" role="tab">
+              Tengo
+            </button>
+            <button class="chip" type="button" data-filter="missing" role="tab">
+              Me faltan
+            </button>
+            <button class="chip" type="button" data-filter="dupes" role="tab">
+              Repetidas
+            </button>
+            <button class="chip" type="button" data-filter="main" role="tab">
+              Álbum principal
+            </button>
+            <button class="chip" type="button" data-filter="poster" role="tab">
+              Póster / M
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid-section" aria-label="Checklist de cromos">
+        <div class="grid-header">
+          <h2 class="section-title" id="stickers">Checklist</h2>
+          <div class="grid-meta">
+            <span class="meta-pill" id="visibleCountPill">Mostrando 224</span>
+            <span class="meta-pill meta-pill-soft" id="activeFilterPill">Filtro: Todos</span>
+          </div>
+        </div>
+
+        <div class="grid" id="grid" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <div class="toast-region" aria-live="polite" aria-atomic="true" id="toastRegion"></div>
+
+    <footer class="footer">
+      <div class="container footer-inner">
+        <div class="footer-note">
+          Hecho para coleccionar. No incluye imágenes oficiales; coloca tus propias imágenes en
+          <code>assets/</code>.
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
