@@ -17,7 +17,7 @@
   // COLLECTION_ACCESS_CODE queda "quemado" para que la app cargue automáticamente
   // la misma colección compartida, sin login ni pantalla para ingresar código.
   // Si necesitas seguridad real: implementa Supabase Auth o una función serverless.
-  const SUPABASE_URL = "https://ydcgppqaftxnioeeduhj.supabase.co/rest/v1/";
+  const SUPABASE_URL = "https://ydcgppqaftxnioeeduhj.supabase.co";
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkY2dwcHFhZnR4bmlvZWVkdWhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MDA1OTEsImV4cCI6MjA5Mjk3NjU5MX0.HhxrSn9Ke8wPfyiwgCWGHaK99AgiLWwFKwK-uzcXm3E";
   const COLLECTION_ACCESS_CODE = "MARIO-FAMILIA-8392";
 
@@ -363,14 +363,16 @@
   }
 
   function isSupabaseConfigReady() {
-    return (
-      SUPABASE_URL &&
-      isValidHttpUrl(SUPABASE_URL) &&
-      SUPABASE_ANON_KEY &&
-      !SUPABASE_URL.includes("https://ydcgppqaftxnioeeduhj.supabase.co/rest/v1/") &&
-      !SUPABASE_ANON_KEY.includes("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkY2dwcHFhZnR4bmlvZWVkdWhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MDA1OTEsImV4cCI6MjA5Mjk3NjU5MX0.HhxrSn9Ke8wPfyiwgCWGHaK99AgiLWwFKwK-uzcXm3E")
-    );
-  }
+  return (
+    typeof SUPABASE_URL === "string" &&
+    SUPABASE_URL.trim() !== "" &&
+    isValidHttpUrl(SUPABASE_URL) &&
+    typeof SUPABASE_ANON_KEY === "string" &&
+    SUPABASE_ANON_KEY.trim() !== "" &&
+    typeof COLLECTION_ACCESS_CODE === "string" &&
+    COLLECTION_ACCESS_CODE.trim() !== ""
+  );
+}
 
   let sb = null;
   let sbInitAttempted = false;
