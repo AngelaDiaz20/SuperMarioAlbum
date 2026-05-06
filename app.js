@@ -53,36 +53,38 @@
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
   const els = {
-    grid: $("#grid"),
     toastRegion: $("#toastRegion"),
 
-    metricTotal: $("#metricTotal"),
     metricHave: $("#metricHave"),
     metricMissing: $("#metricMissing"),
     metricDupes: $("#metricDupes"),
     summaryLine: $("#summaryLine"),
-    summaryMissing: $("#summaryMissing"),
-    summaryDupes: $("#summaryDupes"),
-    summaryPercent: $("#summaryPercent"),
     progressText: $("#progressText"),
     progressBar: $("#progressBar"),
     progressRail: $(".progress-rail"),
 
-    visibleCountPill: $("#visibleCountPill"),
-    activeFilterPill: $("#activeFilterPill"),
-
     syncStatusPill: $("#syncStatusPill"),
+
+    tabs: $$(".tab[data-filter]"),
+    orderBtn: $("#orderBtn"),
 
     searchInput: $("#searchInput"),
     searchBtn: $("#searchBtn"),
     clearSearchBtn: $("#clearSearchBtn"),
 
-    copyMissingBtn: $("#copyMissingBtn"),
-    copyDupesBtn: $("#copyDupesBtn"),
-    exportBtn: $("#exportBtn"),
-    importBtn: $("#importBtn"),
     importFile: $("#importFile"),
-    resetBtn: $("#resetBtn"),
+
+    albumView: $("#albumView"),
+    statsView: $("#statsView"),
+    syncView: $("#syncView"),
+    settingsView: $("#settingsView"),
+    bottomNav: $(".bottom-nav"),
+
+    stickerModal: $("#stickerModal"),
+    modalStickerId: $("#modalStickerId"),
+    modalStickerSection: $("#modalStickerSection"),
+    modalOwned: $("#modalOwned"),
+    modalDupes: $("#modalDupes"),
   };
 
   // ============================================================================
@@ -240,7 +242,7 @@
   // ============================================================================
 
   function defaultUiState() {
-    return { filter: "all" };
+    return { filter: "all", view: "album", collapsedSections: {} };
   }
 
   function loadUiState() {
@@ -248,7 +250,15 @@
       const raw = localStorage.getItem(UI_PREFS_KEY);
       const parsed = safeParseJSON(raw);
       const next = defaultUiState();
-      if (parsed && typeof parsed === "object" && typeof parsed.filter === "string") next.filter = parsed.filter;
+      if (parsed && typeof parsed === "object") {
+        if (typeof parsed.filter === "string") next.filter = parsed.filter;
+        if (typeof parsed.view === "string") next.view = parsed.view;
+        if (parsed.collapsedSections && typeof parsed.collapsedSections === "object") {
+          next.collapsedSections = { ...parsed.collapsedSections };
+        }
+      }
+      if (!["all", "missing", "dupes"].includes(next.filter)) next.filter = "all";
+      if (!["album", "stats", "sync", "settings"].includes(next.view)) next.view = "album";
       return next;
     } catch {
       return defaultUiState();
@@ -284,7 +294,8 @@
     const owned = Boolean(entry && entry.owned);
     const dupRaw = entry && Number.isFinite(entry.duplicates) ? entry.duplicates : 0;
     const duplicates = Math.max(0, Math.floor(dupRaw));
-    return { owned, duplicates };
+    const updatedAt = entry && typeof entry.updatedAt === "string" ? entry.updatedAt : null;
+    return updatedAt ? { owned, duplicates, updatedAt } : { owned, duplicates };
   }
 
   function getEntry(id) {
@@ -363,16 +374,16 @@
   }
 
   function isSupabaseConfigReady() {
-  return (
-    typeof SUPABASE_URL === "string" &&
-    SUPABASE_URL.trim() !== "" &&
-    isValidHttpUrl(SUPABASE_URL) &&
-    typeof SUPABASE_ANON_KEY === "string" &&
-    SUPABASE_ANON_KEY.trim() !== "" &&
-    typeof COLLECTION_ACCESS_CODE === "string" &&
-    COLLECTION_ACCESS_CODE.trim() !== ""
-  );
-}
+    return (
+      typeof SUPABASE_URL === "string" &&
+      SUPABASE_URL.trim() !== "" &&
+      isValidHttpUrl(SUPABASE_URL) &&
+      typeof SUPABASE_ANON_KEY === "string" &&
+      SUPABASE_ANON_KEY.trim() !== "" &&
+      typeof COLLECTION_ACCESS_CODE === "string" &&
+      COLLECTION_ACCESS_CODE.trim() !== ""
+    );
+  }
 
   let sb = null;
   let sbInitAttempted = false;
@@ -624,16 +635,10 @@
   function matchesFilter(item, filter) {
     const e = getEntry(item.id);
     switch (filter) {
-      case "have":
-        return e.owned === true;
       case "missing":
         return e.owned === false;
       case "dupes":
         return e.duplicates > 0;
-      case "main":
-        return item.sectionId === "main";
-      case "poster":
-        return item.sectionId === "poster";
       case "all":
       default:
         return true;
@@ -646,15 +651,11 @@
 
   function renderDashboard() {
     const { total, ownedCount, missing, dupes, percent } = computeStats();
-    if (els.metricTotal) els.metricTotal.textContent = String(total);
     if (els.metricHave) els.metricHave.textContent = String(ownedCount);
     if (els.metricMissing) els.metricMissing.textContent = String(missing);
     if (els.metricDupes) els.metricDupes.textContent = String(dupes);
 
     if (els.summaryLine) els.summaryLine.textContent = `Tienes ${ownedCount} de ${total} cromos`;
-    if (els.summaryMissing) els.summaryMissing.textContent = `Faltan ${missing}`;
-    if (els.summaryDupes) els.summaryDupes.textContent = `Repetidas: ${dupes}`;
-    if (els.summaryPercent) els.summaryPercent.textContent = `Progreso: ${percent.toFixed(1)}%`;
 
     if (els.progressText) els.progressText.textContent = `${percent.toFixed(1)}%`;
     if (els.progressBar) els.progressBar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
@@ -664,142 +665,251 @@
     }
   }
 
-  function stickerMiniMarkup(id) {
-    const fallback = id.startsWith("M") ? "🧩" : "🟦";
-    const safeAlt = "";
-    return `
-      <div class="sticker-mini" aria-hidden="true">
-        <img src="./assets/sticker-placeholder.png" alt="${safeAlt}" loading="lazy" decoding="async"
-          onerror="this.remove(); this.parentElement.insertAdjacentHTML('beforeend','<div class=&quot;mini-fallback&quot; aria-hidden=&quot;true&quot;>${fallback}</div>')" />
-      </div>
-    `;
-  }
-
-  function renderCard(item) {
-    const e = getEntry(item.id);
-    const owned = e.owned === true;
-    const hasDupes = e.duplicates > 0;
-
-    const sectionClass = item.sectionId === "poster" ? "poster" : "";
-    const cardClasses = ["card", owned ? "is-have" : "is-missing", hasDupes ? "has-dupes" : ""].filter(Boolean).join(" ");
-
-    const stickerId = item.id;
-    const checkboxId = `owned_${stickerId.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
-    const statusLabel = hasDupes ? "Repetidas" : owned ? "Conseguido" : "Faltante";
-
-    return `
-      <article class="${cardClasses}" data-sticker-id="${escapeHtml(stickerId)}" aria-label="Cromo ${escapeHtml(
-      stickerId
-    )} (${escapeHtml(item.sectionLabel)}). Estado: ${statusLabel}.">
-        <div class="card-top">
-          <div class="sticker-id">
-            ${stickerMiniMarkup(stickerId)}
-            <span>${escapeHtml(stickerId)}</span>
-          </div>
-          <div class="section-pill ${sectionClass}">${escapeHtml(item.sectionLabel)}</div>
-        </div>
-
-        <div class="card-body">
-          <div class="have-row">
-            <label class="have-label" for="${checkboxId}">
-              <input type="checkbox" id="${checkboxId}" data-action="toggle-owned" data-id="${escapeHtml(
-      stickerId
-    )}" ${owned ? "checked" : ""} />
-              <span>La tengo</span>
-            </label>
-            <div class="state-badges" aria-hidden="true">
-              <span class="state ${owned ? "have" : "missing"}">${owned ? "Conseguido" : "Faltante"}</span>
-              ${hasDupes ? `<span class="state dupes">Repetidas</span>` : ""}
-            </div>
-          </div>
-
-          <div class="dupes-row" aria-label="Control de repetidas">
-            <div>
-              <div class="dupes-title">Repetidas</div>
-              <div class="help" style="margin-top:4px">Cuántas copias extra tienes</div>
-            </div>
-            <div class="stepper">
-              <button class="mini-btn" type="button" data-action="dupe-dec" data-id="${escapeHtml(
-      stickerId
-    )}" aria-label="Restar repetida a ${escapeHtml(stickerId)}">−</button>
-              <div class="count" aria-label="Repetidas de ${escapeHtml(stickerId)}">${e.duplicates}</div>
-              <button class="mini-btn" type="button" data-action="dupe-inc" data-id="${escapeHtml(
-      stickerId
-    )}" aria-label="Sumar repetida a ${escapeHtml(stickerId)}">+</button>
-            </div>
-          </div>
-        </div>
-      </article>
-    `;
-  }
-
-  function renderGrid() {
-    const items = visibleItems();
-    console.log(`Rendering stickers: ${items.length} items`);
-
-    if (!els.grid) {
-      console.error("Grid container not found: #grid");
-      return;
-    }
-
-    if (items.length === 0) {
-      els.grid.innerHTML = `
-        <div class="empty-state" role="status" aria-live="polite">
-          <div class="empty-title">No hay cromos para este filtro.</div>
-          <div class="empty-meta">Cambia el filtro o busca un cromo específico.</div>
-        </div>
-      `;
-    } else {
-      try {
-        els.grid.innerHTML = items.map(renderCard).join("");
-      } catch (err) {
-        console.error("renderGrid error", err);
-        els.grid.innerHTML = `
-          <div class="empty-state" role="status" aria-live="polite">
-            <div class="empty-title">No se pudo renderizar el listado.</div>
-            <div class="empty-meta">Revisa la consola para más detalles.</div>
-          </div>
-        `;
-      }
-    }
-
-    if (els.visibleCountPill) els.visibleCountPill.textContent = `Mostrando ${items.length}`;
-    if (els.activeFilterPill) els.activeFilterPill.textContent = `Filtro: ${filterLabel(uiState.filter)}`;
-  }
-
   function filterLabel(filter) {
     switch (filter) {
-      case "have":
-        return "Tengo";
       case "missing":
         return "Me faltan";
       case "dupes":
         return "Repetidas";
-      case "main":
-        return "Álbum principal";
-      case "poster":
-        return "Póster / M";
       case "all":
       default:
         return "Todas";
     }
   }
 
-  function renderFilters() {
-    $$(".chip[data-filter]").forEach((btn) => {
+  function computeSectionStats(sectionId) {
+    const items = ITEMS.filter((x) => x.sectionId === sectionId);
+    const total = items.length;
+    let ownedCount = 0;
+    let dupes = 0;
+    for (const it of items) {
+      const e = getEntry(it.id);
+      if (e.owned) ownedCount += 1;
+      dupes += e.duplicates;
+    }
+    return { total, ownedCount, dupes };
+  }
+
+  function sectionIcon(sectionId) {
+    if (sectionId === "poster") return "🧩";
+    return "📗";
+  }
+
+  function getSectionLabel(sectionId) {
+    const s = ALBUM_CONFIG.officialSections.find((x) => x.id === sectionId) || ALBUM_CONFIG.extendedSections.find((x) => x.id === sectionId);
+    return s ? s.label : sectionId;
+  }
+
+  function renderStickerTile(item) {
+    const e = getEntry(item.id);
+    const owned = e.owned === true;
+    const dupes = e.duplicates || 0;
+    const badge = dupes > 0 ? `<div class="dupe-badge" aria-label="Repetidas: ${dupes}">${dupes > 9 ? "9+" : dupes}</div>` : "";
+    const classes = ["sticker-tile", owned ? "is-owned" : "is-missing", dupes > 0 ? "has-dupes" : ""].join(" ");
+    return `
+      <button class="${classes}" type="button" data-sticker-id="${escapeHtml(item.id)}" aria-label="Ficha ${escapeHtml(
+      item.id
+    )}. ${owned ? "Conseguida" : "Faltante"}. ${dupes > 0 ? `Repetidas ${dupes}.` : ""}">
+        <span class="tile-screws" aria-hidden="true"></span>
+        <span class="tile-question" aria-hidden="true">?</span>
+        <span class="tile-number">${escapeHtml(item.id)}</span>
+        ${badge}
+      </button>
+    `;
+  }
+
+  function sectionItemsVisible(sectionId) {
+    return ITEMS.filter((it) => it.sectionId === sectionId).filter((it) => matchesFilter(it, uiState.filter));
+  }
+
+  function renderAlbumView() {
+    if (!els.albumView) return;
+
+    const sectionIds = Array.from(new Set(ITEMS.map((x) => x.sectionId)));
+    const parts = [];
+    for (const sectionId of sectionIds) {
+      const visible = sectionItemsVisible(sectionId);
+      const { total, ownedCount } = computeSectionStats(sectionId);
+      const collapsed = Boolean(uiState.collapsedSections && uiState.collapsedSections[sectionId]);
+
+      parts.push(`
+        <section class="album-section" data-section-id="${escapeHtml(sectionId)}">
+          <header class="section-header">
+            <h2 class="section-title">
+              <span class="sec-ico" aria-hidden="true">${sectionIcon(sectionId)}</span>
+              <span>${escapeHtml(getSectionLabel(sectionId))}</span>
+            </h2>
+            <div class="section-progress">
+              <span class="sec-count">${ownedCount} / ${total}</span>
+              <button class="sec-toggle" type="button" data-action="toggle-section" data-section="${escapeHtml(
+                sectionId
+              )}">${collapsed ? "Expandir" : "Colapsar"}</button>
+            </div>
+          </header>
+          ${collapsed ? "" : `<div class="sticker-grid-compact">${visible.map(renderStickerTile).join("")}</div>`}
+        </section>
+      `);
+    }
+
+    els.albumView.innerHTML = parts.join("");
+  }
+
+  function renderStatsView() {
+    if (!els.statsView) return;
+    const stats = computeStats();
+
+    const main = computeSectionStats("main");
+    const poster = computeSectionStats("poster");
+
+    const percent = Math.max(0, Math.min(100, stats.percent));
+    const ring = `
+      <div style="display:flex; gap:12px; align-items:center; justify-content:space-between;">
+        <div class="progress-ring" style="--p:${percent}%">
+          <div class="ring-label">${percent.toFixed(1)}%</div>
+        </div>
+        <div style="flex:1;">
+          <div class="tile-subtle">Progreso general</div>
+          <div class="bar" aria-label="Progreso general"><div style="width:${percent}%"></div></div>
+          <div style="margin-top:10px; display:grid; gap:8px;">
+            <div class="tile-subtle">Álbum principal</div>
+            <div class="bar"><div style="width:${main.total ? (main.ownedCount / main.total) * 100 : 0}%"></div></div>
+            <div class="tile-subtle">Póster / M</div>
+            <div class="bar"><div style="width:${poster.total ? (poster.ownedCount / poster.total) * 100 : 0}%"></div></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const topDupes = ITEMS
+      .map((it) => ({ id: it.id, dupes: getEntry(it.id).duplicates }))
+      .filter((x) => x.dupes > 0)
+      .sort((a, b) => b.dupes - a.dupes)
+      .slice(0, 8);
+
+    const topDupesMarkup =
+      topDupes.length === 0
+        ? `<div class="tile-subtle">Aún no tienes repetidas.</div>`
+        : `<div class="list">${topDupes
+            .map((x) => `<div class="list-item"><strong>${escapeHtml(x.id)}</strong><span>x${x.dupes}</span></div>`)
+            .join("")}</div>`;
+
+    els.statsView.innerHTML = `
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-title">Completado</div>
+          <div class="stat-value">${stats.percent.toFixed(1)}%</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-title">Total</div>
+          <div class="stat-value">${stats.total}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-title">Me faltan</div>
+          <div class="stat-value">${stats.missing}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-title">Tengo</div>
+          <div class="stat-value">${stats.ownedCount}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-title">Repetidas (total)</div>
+          <div class="stat-value">${stats.dupes}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-title">Secciones</div>
+          <div class="stat-value" style="font-size:14px; letter-spacing:0;">
+            Álbum: ${main.ownedCount} / ${main.total}<br />
+            Póster: ${poster.ownedCount} / ${poster.total}
+          </div>
+        </div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-title">Progreso visual</div>
+          <div style="margin-top:10px;">${ring}</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-title">Top repetidas</div>
+          <div style="margin-top:10px;">${topDupesMarkup}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderSyncView() {
+    if (!els.syncView) return;
+    const lastRemote = collectionRow && collectionRow.updated_at ? new Date(collectionRow.updated_at).toLocaleString() : "—";
+    const lastLocal = progress && progress.lastUpdated ? new Date(progress.lastUpdated).toLocaleString() : "—";
+    els.syncView.innerHTML = `
+      <div class="stat-card">
+        <div class="stat-title">Estado</div>
+        <div class="stat-value" style="font-size:16px; letter-spacing:0;">${escapeHtml(cloudMessage)}</div>
+        <div class="help">Último guardado local: <strong>${escapeHtml(lastLocal)}</strong></div>
+        <div class="help">Último update remoto: <strong>${escapeHtml(lastRemote)}</strong></div>
+        <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn btn-primary" type="button" data-action="force-reload">Forzar recarga desde Supabase</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderSettingsView() {
+    if (!els.settingsView) return;
+    const masked = `${COLLECTION_ACCESS_CODE.slice(0, 4)}…${COLLECTION_ACCESS_CODE.slice(-4)}`;
+    els.settingsView.innerHTML = `
+      <div class="stat-card">
+        <div class="stat-title">Progreso</div>
+        <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn btn-primary" type="button" data-action="export">Exportar JSON</button>
+          <button class="btn" type="button" data-action="import">Importar JSON</button>
+          <button class="btn btn-danger" type="button" data-action="reset-all">Resetear progreso</button>
+        </div>
+        <div class="help" style="margin-top:10px;">La fuente de verdad es Supabase. Importar/Resetear también sincroniza a la colección compartida.</div>
+      </div>
+
+      <div class="stat-card" style="margin-top:12px;">
+        <div class="stat-title">Colección</div>
+        <div class="stat-value" style="font-size:14px; letter-spacing:0;">access_code: <strong>${escapeHtml(masked)}</strong></div>
+        <div class="help">Nota: este código está embebido en el frontend. Para seguridad real, usa Auth o una función serverless.</div>
+      </div>
+    `;
+  }
+
+  function renderTabs() {
+    for (const btn of els.tabs || []) {
       const f = btn.getAttribute("data-filter") || "all";
       const active = f === uiState.filter;
       btn.classList.toggle("is-active", active);
       btn.setAttribute("aria-selected", active ? "true" : "false");
       btn.setAttribute("tabindex", active ? "0" : "-1");
+    }
+  }
+
+  function renderViews() {
+    const view = uiState.view || "album";
+    if (els.albumView) els.albumView.classList.toggle("is-active", view === "album");
+    if (els.statsView) els.statsView.classList.toggle("is-active", view === "stats");
+    if (els.syncView) els.syncView.classList.toggle("is-active", view === "sync");
+    if (els.settingsView) els.settingsView.classList.toggle("is-active", view === "settings");
+
+    $$(".bottom-nav .nav-btn").forEach((btn) => {
+      const v = btn.getAttribute("data-view");
+      btn.classList.toggle("is-active", v === view);
     });
+
+    if (view === "album") renderAlbumView();
+    if (view === "stats") renderStatsView();
+    if (view === "sync") renderSyncView();
+    if (view === "settings") renderSettingsView();
   }
 
   function render() {
     try {
       renderDashboard();
-      renderFilters();
-      renderGrid();
+      renderTabs();
+      renderViews();
     } catch (err) {
       console.error("Render error", err);
     }
@@ -949,21 +1059,22 @@
       return;
     }
 
-    // Asegura visibilidad
+    uiState.view = "album";
     uiState.filter = "all";
+    if (uiState.collapsedSections) uiState.collapsedSections = { ...uiState.collapsedSections, main: false, poster: false };
     saveUiState();
     render();
 
     requestAnimationFrame(() => {
-      const card = document.querySelector(`[data-sticker-id="${CSS.escape(id)}"]`);
-      if (!card) return;
-      card.classList.remove("card-highlight");
-      void card.offsetWidth;
-      card.classList.add("card-highlight");
-      card.scrollIntoView({ behavior: "smooth", block: "center" });
+      const tile = document.querySelector(`[data-sticker-id="${CSS.escape(id)}"]`);
+      if (!tile) return;
+      tile.classList.remove("tile-highlight");
+      void tile.offsetWidth;
+      tile.classList.add("tile-highlight");
+      tile.scrollIntoView({ behavior: "smooth", block: "center" });
       toast("🎯", "Encontrado", `Salté a ${id}.`);
-      const checkbox = card.querySelector('input[type="checkbox"]');
-      if (checkbox) checkbox.focus({ preventScroll: true });
+      if (tile instanceof HTMLElement) tile.focus({ preventScroll: true });
+      setTimeout(() => tile.classList.remove("tile-highlight"), 1400);
     });
   }
 
@@ -971,62 +1082,180 @@
   //  Events
   // ============================================================================
 
-  function onGridClick(e) {
-    const t = e.target;
-    if (!(t instanceof HTMLElement)) return;
-    const action = t.getAttribute("data-action");
-    const id = t.getAttribute("data-id");
-    if (!action || !id) return;
+  const LONG_PRESS_MS = 550;
+  const pressState = {
+    timer: null,
+    pointerId: null,
+    targetId: null,
+    didLongPress: false,
+  };
 
-    const cid = canonicalizeStickerId(id);
-    if (!cid || !IDS.has(cid)) return;
-    const cur = getEntry(cid);
+  let modalState = { id: null, dupes: 0 };
 
-    if (action === "dupe-inc") {
-      setEntry(cid, { ...cur, duplicates: cur.duplicates + 1 });
-      toast("🪙", "Repetida sumada", `${cid} ahora tiene ${cur.duplicates + 1}.`);
+  function handleStickerTap(id) {
+    const current = getEntry(id);
+    if (!current.owned) {
+      setEntry(id, { owned: true, duplicates: 0, updatedAt: new Date().toISOString() });
+      toast("✅", "Conseguida", `${id}`);
       return;
     }
-    if (action === "dupe-dec") {
-      const next = Math.max(0, cur.duplicates - 1);
-      setEntry(cid, { ...cur, duplicates: next });
-      toast("🪙", "Repetida restada", `${cid} ahora tiene ${next}.`);
-      return;
-    }
+    setEntry(id, { owned: true, duplicates: current.duplicates + 1, updatedAt: new Date().toISOString() });
+    toast("🪙", "Repetida sumada", `${id} ahora tiene ${current.duplicates + 1}.`);
   }
 
-  function onGridChange(e) {
-    const t = e.target;
-    if (!(t instanceof HTMLInputElement)) return;
-    if (t.type !== "checkbox") return;
-    const action = t.getAttribute("data-action");
-    const id = t.getAttribute("data-id");
-    if (action !== "toggle-owned" || !id) return;
-
+  function openStickerModal(id) {
     const cid = canonicalizeStickerId(id);
-    if (!cid || !IDS.has(cid)) return;
-    const cur = getEntry(cid);
-    setEntry(cid, { ...cur, owned: t.checked });
-    toast(t.checked ? "✅" : "⬜️", t.checked ? "Marcado como tengo" : "Marcado como faltante", `${cid}`);
+    if (!cid || !IDS.has(cid) || !els.stickerModal) return;
+    const item = ITEMS.find((x) => x.id === cid);
+    const entry = getEntry(cid);
+
+    modalState = { id: cid, dupes: entry.duplicates };
+
+    if (els.modalStickerId) els.modalStickerId.textContent = cid;
+    if (els.modalStickerSection) els.modalStickerSection.textContent = item ? item.sectionLabel : "—";
+    if (els.modalOwned) els.modalOwned.checked = Boolean(entry.owned);
+    if (els.modalDupes) els.modalDupes.textContent = String(entry.duplicates);
+
+    els.stickerModal.hidden = false;
+    document.body.style.overflow = "hidden";
+    const closeBtn = els.stickerModal.querySelector('[data-action="close-modal"]');
+    if (closeBtn instanceof HTMLElement) closeBtn.focus();
+  }
+
+  function closeStickerModal() {
+    if (!els.stickerModal) return;
+    els.stickerModal.hidden = true;
+    document.body.style.overflow = "";
+    modalState = { id: null, dupes: 0 };
+  }
+
+  function modalSetDupes(next) {
+    const v = Math.max(0, Math.floor(next));
+    modalState.dupes = v;
+    if (els.modalDupes) els.modalDupes.textContent = String(v);
+    if (els.modalOwned && v > 0) els.modalOwned.checked = true;
+  }
+
+  function updateStickerFromModal() {
+    const id = modalState.id;
+    if (!id) return;
+    const owned = Boolean(els.modalOwned && els.modalOwned.checked);
+    const dupes = Math.max(0, Math.floor(modalState.dupes || 0));
+    const nextOwned = dupes > 0 ? true : owned;
+    const nextDupes = nextOwned ? dupes : 0;
+    setEntry(id, { owned: nextOwned, duplicates: nextDupes, updatedAt: new Date().toISOString() });
+    toast("💾", "Guardado", `${id}`);
+    closeStickerModal();
+  }
+
+  function resetStickerFromModal() {
+    const id = modalState.id;
+    if (!id) return;
+    setEntry(id, { owned: false, duplicates: 0, updatedAt: new Date().toISOString() });
+    toast("🧽", "Reseteada", `${id}`);
+    closeStickerModal();
+  }
+
+  async function forceReloadFromSupabase() {
+    toast("🔄", "Recargando…", "Consultando Supabase.");
+    await loadFromSupabase();
   }
 
   function bindEvents() {
-    // Filters
-    $$(".chip[data-filter]").forEach((btn) => {
+    // Tabs (filters)
+    for (const btn of els.tabs || []) {
       btn.addEventListener("click", () => {
         uiState.filter = btn.getAttribute("data-filter") || "all";
         saveUiState();
         render();
         toast("🔎", "Filtro aplicado", `Ahora: ${filterLabel(uiState.filter)}.`);
       });
-    });
+    }
 
-    // Grid
-    if (!els.grid) {
-      console.error("Grid container not found: #grid (cannot bind events)");
-    } else {
-      els.grid.addEventListener("click", onGridClick);
-      els.grid.addEventListener("change", onGridChange);
+    if (els.orderBtn) {
+      els.orderBtn.addEventListener("click", () => {
+        toast("🧭", "Orden", "Visual listo. Puedes agregar orden avanzado luego.");
+      });
+    }
+
+    // Bottom nav
+    if (els.bottomNav) {
+      els.bottomNav.addEventListener("click", (e) => {
+        const t = e.target instanceof Element ? e.target.closest("[data-view]") : null;
+        if (!t) return;
+        const view = t.getAttribute("data-view");
+        if (!view) return;
+        uiState.view = view;
+        saveUiState();
+        render();
+      });
+    }
+
+    // Album interactions: tap / long-press
+    if (els.albumView) {
+      els.albumView.addEventListener("click", (e) => {
+        const tile = e.target instanceof Element ? e.target.closest("[data-sticker-id]") : null;
+        if (!tile) return;
+        const id = tile.getAttribute("data-sticker-id");
+        if (!id) return;
+        if (pressState.didLongPress) {
+          pressState.didLongPress = false;
+          return;
+        }
+        handleStickerTap(id);
+      });
+
+      els.albumView.addEventListener("pointerdown", (e) => {
+        const tile = e.target instanceof Element ? e.target.closest("[data-sticker-id]") : null;
+        if (!tile || !(tile instanceof HTMLElement)) return;
+        const id = tile.getAttribute("data-sticker-id");
+        if (!id) return;
+
+        pressState.didLongPress = false;
+        pressState.pointerId = e.pointerId;
+        pressState.targetId = id;
+        if (pressState.timer) clearTimeout(pressState.timer);
+        tile.classList.add("is-pressing");
+
+        pressState.timer = setTimeout(() => {
+          pressState.didLongPress = true;
+          tile.classList.add("is-pressing");
+          openStickerModal(id);
+        }, LONG_PRESS_MS);
+      });
+
+      const clearPress = (e) => {
+        if (pressState.timer) clearTimeout(pressState.timer);
+        pressState.timer = null;
+        const id = pressState.targetId;
+        pressState.targetId = null;
+        if (!id) return;
+        const tile = document.querySelector(`[data-sticker-id="${CSS.escape(id)}"]`);
+        if (tile instanceof HTMLElement) tile.classList.remove("is-pressing");
+      };
+
+      els.albumView.addEventListener("pointerup", clearPress);
+      els.albumView.addEventListener("pointercancel", clearPress);
+      els.albumView.addEventListener("pointerleave", clearPress);
+
+      els.albumView.addEventListener("contextmenu", (e) => {
+        const tile = e.target instanceof Element ? e.target.closest("[data-sticker-id]") : null;
+        if (!tile) return;
+        e.preventDefault();
+        const id = tile.getAttribute("data-sticker-id");
+        if (id) openStickerModal(id);
+      });
+
+      els.albumView.addEventListener("click", (e) => {
+        const toggle = e.target instanceof Element ? e.target.closest('[data-action="toggle-section"]') : null;
+        if (!toggle) return;
+        const sectionId = toggle.getAttribute("data-section");
+        if (!sectionId) return;
+        uiState.collapsedSections = uiState.collapsedSections || {};
+        uiState.collapsedSections[sectionId] = !uiState.collapsedSections[sectionId];
+        saveUiState();
+        render();
+      });
     }
 
     // Search
@@ -1044,28 +1273,61 @@
       });
     }
 
-    // Copy lists
-    if (els.copyMissingBtn) {
-      els.copyMissingBtn.addEventListener("click", async () => {
-        const missing = buildMissingList();
-        const text = `Me faltan: ${missing.join(", ") || "(ninguno)"}`;
-        const ok = await copyToClipboard(text);
-        toast(ok ? "📋" : "⚠️", ok ? "Copiado" : "No se pudo copiar", "Lista de faltantes.");
+    // Modal
+    if (els.stickerModal) {
+      els.stickerModal.addEventListener("click", (e) => {
+        const actionEl = e.target instanceof Element ? e.target.closest("[data-action]") : null;
+        if (!actionEl) return;
+        const action = actionEl.getAttribute("data-action");
+        if (!action) return;
+        if (action === "close-modal") return closeStickerModal();
+        if (action === "modal-dupe-inc") return modalSetDupes(modalState.dupes + 1);
+        if (action === "modal-dupe-dec") return modalSetDupes(modalState.dupes - 1);
+        if (action === "modal-save") return updateStickerFromModal();
+        if (action === "modal-reset") return resetStickerFromModal();
       });
-    }
-    if (els.copyDupesBtn) {
-      els.copyDupesBtn.addEventListener("click", async () => {
-        const dupes = buildDupesList();
-        const text = `Tengo repetidas: ${dupes.join(", ") || "(ninguna)"}`;
-        const ok = await copyToClipboard(text);
-        toast(ok ? "📋" : "⚠️", ok ? "Copiado" : "No se pudo copiar", "Lista de repetidas.");
+
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && els.stickerModal && !els.stickerModal.hidden) closeStickerModal();
       });
+
+      if (els.modalOwned) {
+        els.modalOwned.addEventListener("change", () => {
+          if (els.modalOwned && els.modalOwned.checked === false) {
+            modalSetDupes(0);
+          }
+        });
+      }
     }
 
-    // Export / Import
-    if (els.exportBtn) els.exportBtn.addEventListener("click", exportProgress);
-    if (els.importBtn && els.importFile) {
-      els.importBtn.addEventListener("click", () => els.importFile.click());
+    // Sync + Settings actions (delegation)
+    document.addEventListener("click", async (e) => {
+      const el = e.target instanceof Element ? e.target.closest("[data-action]") : null;
+      if (!el) return;
+      const action = el.getAttribute("data-action");
+      if (!action) return;
+
+      if (action === "force-reload") {
+        await forceReloadFromSupabase();
+        return;
+      }
+
+      if (action === "export") {
+        exportProgress();
+        return;
+      }
+      if (action === "import") {
+        if (els.importFile) els.importFile.click();
+        return;
+      }
+      if (action === "reset-all") {
+        resetProgress();
+        return;
+      }
+    });
+
+    // Import file
+    if (els.importFile) {
       els.importFile.addEventListener("click", () => {
         els.importFile.value = "";
       });
@@ -1080,9 +1342,6 @@
         await importProgressFromFile(file);
       });
     }
-
-    // Reset
-    if (els.resetBtn) els.resetBtn.addEventListener("click", resetProgress);
   }
 
   // ============================================================================
