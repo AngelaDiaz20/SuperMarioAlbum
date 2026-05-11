@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="light" />
+    <meta name="color-scheme" content="dark" />
     <title>Super Mario Sticker Checklist</title>
     <meta
       name="description"
@@ -58,42 +58,47 @@
           </div>
           <div class="progress-rail" role="progressbar" aria-valuemin="0" aria-valuemax="100">
             <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+            <span class="progress-marker" id="progressMarker" aria-hidden="true">⭐</span>
           </div>
         </div>
       </div>
     </header>
 
     <main class="app-shell">
-      <section class="top-tabs" role="tablist" aria-label="Filtros">
-        <button class="tab" type="button" data-filter="all" role="tab">Todas</button>
-        <button class="tab" type="button" data-filter="missing" role="tab">Me faltan</button>
-        <button class="tab" type="button" data-filter="dupes" role="tab">Repetidas</button>
-        <button class="tab tab-secondary" type="button" id="orderBtn" aria-label="Orden">
-          Orden
-        </button>
-      </section>
+      <section id="albumView" class="view is-active" aria-label="Álbum">
+        <section class="album-controls" aria-label="Controles de álbum">
+          <section class="top-tabs" role="tablist" aria-label="Filtros">
+            <button class="tab" type="button" data-filter="all" role="tab">Todas</button>
+            <button class="tab" type="button" data-filter="missing" role="tab">Me faltan</button>
+            <button class="tab" type="button" data-filter="dupes" role="tab">Repetidas</button>
+            <button class="tab tab-secondary" type="button" id="orderBtn" aria-label="Orden">
+              Orden
+            </button>
+          </section>
 
-      <section class="search-panel" aria-label="Buscar">
-        <div class="search-box">
-          <input
-            id="searchInput"
-            class="input"
-            type="search"
-            inputmode="search"
-            autocomplete="off"
-            placeholder="Buscar: 45, 045, M12…"
-          />
-          <button class="btn btn-primary" id="searchBtn" type="button">Buscar</button>
-          <button class="btn btn-ghost" id="clearSearchBtn" type="button" aria-label="Limpiar búsqueda">
-            ✕
-          </button>
-        </div>
-        <div class="help" id="searchHelp">
-          Tip: <strong>45</strong> o <strong>045</strong>, y póster: <strong>M12</strong>
-        </div>
-      </section>
+          <section class="search-panel" aria-label="Buscar">
+            <div class="search-box">
+              <input
+                id="searchInput"
+                class="input"
+                type="search"
+                inputmode="search"
+                autocomplete="off"
+                placeholder="Buscar: 45, 045, M12…"
+              />
+              <button class="btn btn-primary" id="searchBtn" type="button">Buscar</button>
+              <button class="btn btn-ghost" id="clearSearchBtn" type="button" aria-label="Limpiar búsqueda">
+                ✕
+              </button>
+            </div>
+            <div class="help" id="searchHelp">
+              Tip: <strong>45</strong> o <strong>045</strong>, y póster: <strong>M12</strong>
+            </div>
+          </section>
+        </section>
 
-      <section id="albumView" class="view is-active" aria-label="Álbum"></section>
+        <section id="albumSections" class="album-sections" aria-label="Secciones del álbum"></section>
+      </section>
       <section id="statsView" class="view" aria-label="Estadísticas"></section>
       <section id="syncView" class="view" aria-label="Sincronización"></section>
       <section id="settingsView" class="view" aria-label="Configuración"></section>
@@ -101,19 +106,43 @@
 
     <nav class="bottom-nav" aria-label="Navegación inferior">
       <button type="button" class="nav-btn is-active" data-view="album" aria-label="Álbum">
-        <span class="nav-ico" aria-hidden="true">📖</span>
+        <span class="nav-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+            <path d="M4 5.5c0-1 1-1.7 2-1.5l10 2c.9.2 2 .9 2 2v12.8c0 .9-.9 1.5-1.8 1.3l-10.4-2.1c-1-.2-1.8-1.1-1.8-2.1V5.5z" />
+            <path d="M6 6.6h9.5M6 9h9.5M6 11.4h7.2" />
+          </svg>
+        </span>
         <span class="nav-text">Álbum</span>
       </button>
       <button type="button" class="nav-btn" data-view="stats" aria-label="Estadísticas">
-        <span class="nav-ico" aria-hidden="true">📊</span>
+        <span class="nav-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+            <path d="M5 19V10M10 19V5M15 19v-8M20 19v-12" />
+            <path d="M4 19h17" />
+          </svg>
+        </span>
         <span class="nav-text">Estadísticas</span>
       </button>
       <button type="button" class="nav-btn" data-view="sync" aria-label="Sync">
-        <span class="nav-ico" aria-hidden="true">🔄</span>
+        <span class="nav-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+            <path d="M20 7v5h-5" />
+            <path d="M4 17v-5h5" />
+            <path d="M6.5 9.5A7 7 0 0 1 20 12" />
+            <path d="M17.5 14.5A7 7 0 0 1 4 12" />
+          </svg>
+        </span>
         <span class="nav-text">Sync</span>
       </button>
       <button type="button" class="nav-btn" data-view="settings" aria-label="Configuración">
-        <span class="nav-ico" aria-hidden="true">⚙️</span>
+        <span class="nav-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+            <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z" />
+            <path
+              d="M19.4 13.2l1.1-1.9-1.6-2.7-2.2.4a7.7 7.7 0 0 0-1.2-.7L15 6l-3-.9-1.5 1.7h-1.1L7.9 5.1 5 6l.5 2a7.7 7.7 0 0 0-1.2.7l-2.2-.4-1.6 2.7 1.1 1.9a7.8 7.8 0 0 0 0 1.6L.5 16.7l1.6 2.7 2.2-.4c.4.3.8.5 1.2.7l-.5 2 2.9.9 1.5-1.7h1.1l1.5 1.7 3-.9-.5-2c.4-.2.8-.4 1.2-.7l2.2.4 1.6-2.7-1.1-1.9c.1-.5.1-1.1 0-1.6z"
+            />
+          </svg>
+        </span>
         <span class="nav-text">Config</span>
       </button>
     </nav>

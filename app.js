@@ -44,6 +44,14 @@
   const CACHE_KEY = "sm_supabase_cache_v1";
   const UI_PREFS_KEY = "sm_ui_prefs_v1";
   const CLIENT_ID_KEY = "sm_client_id_v1";
+  const SOUND_PREFS_KEY = "sm_sound_prefs_v1";
+  const LEGACY_SFX_PREFS_KEY = "sm_sfx_prefs_v1";
+
+  const SFX_FILES = {
+    coin: "./assets/sfx/coin.mp3",
+    duplicate: "./assets/sfx/duplicate.mp3",
+    pop: "./assets/sfx/pop.mp3",
+  };
 
   // ============================================================================
   //  DOM
@@ -62,6 +70,7 @@
     progressText: $("#progressText"),
     progressBar: $("#progressBar"),
     progressRail: $(".progress-rail"),
+    progressMarker: $("#progressMarker"),
 
     syncStatusPill: $("#syncStatusPill"),
 
@@ -75,6 +84,7 @@
     importFile: $("#importFile"),
 
     albumView: $("#albumView"),
+    albumSections: $("#albumSections"),
     statsView: $("#statsView"),
     syncView: $("#syncView"),
     settingsView: $("#settingsView"),
@@ -274,6 +284,111 @@
   }
 
   const uiState = loadUiState();
+
+  // ============================================================================
+  //  SFX (client-only, opcional)
+  // ============================================================================
+
+  let sfx = {};
+  let sfxReady = false;
+  let sfxUnlocked = false;
+
+  function loadSoundPrefs() {
+    const next = { enabled: true, volume: 0.45 };
+    try {
+      const raw = localStorage.getItem(SOUND_PREFS_KEY) || localStorage.getItem(LEGACY_SFX_PREFS_KEY);
+      const parsed = safeParseJSON(raw);
+      if (parsed && typeof parsed === "object") {
+        if (typeof parsed.enabled === "boolean") next.enabled = parsed.enabled;
+        if (Number.isFinite(parsed.volume)) next.volume = Math.max(0, Math.min(1, parsed.volume));
+      }
+    } catch {
+      // ignore
+    }
+    return next;
+  }
+
+  function saveSoundPrefs() {
+    try {
+      localStorage.setItem(SOUND_PREFS_KEY, JSON.stringify(soundPrefs));
+    } catch {
+      // ignore
+    }
+  }
+
+  const soundPrefs = loadSoundPrefs();
+
+  function initSfx() {
+    if (sfxReady) return;
+    const next = {};
+    for (const [name, src] of Object.entries(SFX_FILES)) {
+      try {
+        const audio = new Audio(src);
+        audio.preload = "auto";
+        audio.volume = Number.isFinite(soundPrefs.volume) ? soundPrefs.volume : 0.45;
+        next[name] = audio;
+      } catch {
+        // ignore
+      }
+    }
+    sfx = next;
+    sfxReady = true;
+  }
+
+  function unlockSfxOnce() {
+    if (sfxUnlocked) return;
+    sfxUnlocked = true;
+    initSfx();
+    for (const audio of Object.values(sfx)) {
+      if (!audio) continue;
+      try {
+        const prevVol = audio.volume;
+        audio.volume = 0;
+        const p = audio.play();
+        if (p && typeof p.then === "function") {
+          p.then(() => {
+            audio.pause();
+            audio.currentTime = 0;
+            audio.volume = prevVol;
+          }).catch(() => {
+            audio.volume = prevVol;
+          });
+        } else {
+          audio.pause();
+          audio.currentTime = 0;
+          audio.volume = prevVol;
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  function setSoundEnabled(value) {
+    soundPrefs.enabled = Boolean(value);
+    saveSoundPrefs();
+  }
+
+  function playSfx(name) {
+    if (!soundPrefs.enabled) return;
+    initSfx();
+    const audio = sfx && sfx[name];
+    if (!audio) return;
+    console.log("Playing SFX:", name);
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.volume = Number.isFinite(soundPrefs.volume) ? soundPrefs.volume : 0.45;
+      const promise = audio.play();
+      if (promise && typeof promise.catch === "function") {
+        promise.catch((err) => {
+          console.warn("SFX blocked or missing:", name, err);
+        });
+      }
+    } catch {
+      // silent
+    }
+  }
 
   // ============================================================================
   //  Progress state (in-memory, truth comes from Supabase)
@@ -651,6 +766,7 @@
 
   function renderDashboard() {
     const { total, ownedCount, missing, dupes, percent } = computeStats();
+    const clampedPercent = Math.max(0, Math.min(100, percent));
     if (els.metricHave) els.metricHave.textContent = String(ownedCount);
     if (els.metricMissing) els.metricMissing.textContent = String(missing);
     if (els.metricDupes) els.metricDupes.textContent = String(dupes);
@@ -658,7 +774,11 @@
     if (els.summaryLine) els.summaryLine.textContent = `Tienes ${ownedCount} de ${total} cromos`;
 
     if (els.progressText) els.progressText.textContent = `${percent.toFixed(1)}%`;
-    if (els.progressBar) els.progressBar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+    if (els.progressBar) els.progressBar.style.width = `${clampedPercent}%`;
+    if (els.progressMarker) {
+      const markerPercent = Math.max(2, Math.min(98, clampedPercent));
+      els.progressMarker.style.left = `${markerPercent}%`;
+    }
     if (els.progressRail) {
       els.progressRail.setAttribute("aria-valuenow", percent.toFixed(1));
       els.progressRail.setAttribute("aria-label", `Progreso: ${percent.toFixed(1)}%`);
@@ -723,7 +843,7 @@
   }
 
   function renderAlbumView() {
-    if (!els.albumView) return;
+    if (!els.albumSections) return;
 
     const sectionIds = Array.from(new Set(ITEMS.map((x) => x.sectionId)));
     const parts = [];
@@ -751,7 +871,7 @@
       `);
     }
 
-    els.albumView.innerHTML = parts.join("");
+    els.albumSections.innerHTML = parts.join("");
   }
 
   function renderStatsView() {
@@ -870,6 +990,15 @@
       </div>
 
       <div class="stat-card" style="margin-top:12px;">
+        <div class="stat-title">Preferencias</div>
+        <label class="toggle-row" for="soundToggle" style="margin-top:10px;">
+          <input id="soundToggle" type="checkbox" ${soundPrefs.enabled ? "checked" : ""} />
+          <span>Sonidos</span>
+        </label>
+        <div class="help">Activa/desactiva sonidos de interacción (moneda, repetida, modal).</div>
+      </div>
+
+      <div class="stat-card" style="margin-top:12px;">
         <div class="stat-title">Colección</div>
         <div class="stat-value" style="font-size:14px; letter-spacing:0;">access_code: <strong>${escapeHtml(masked)}</strong></div>
         <div class="help">Nota: este código está embebido en el frontend. Para seguridad real, usa Auth o una función serverless.</div>
@@ -889,6 +1018,7 @@
 
   function renderViews() {
     const view = uiState.view || "album";
+    document.body.dataset.view = view;
     if (els.albumView) els.albumView.classList.toggle("is-active", view === "album");
     if (els.statsView) els.statsView.classList.toggle("is-active", view === "stats");
     if (els.syncView) els.syncView.classList.toggle("is-active", view === "sync");
@@ -1096,10 +1226,12 @@
     const current = getEntry(id);
     if (!current.owned) {
       setEntry(id, { owned: true, duplicates: 0, updatedAt: new Date().toISOString() });
+      playSfx("coin");
       toast("✅", "Conseguida", `${id}`);
       return;
     }
     setEntry(id, { owned: true, duplicates: current.duplicates + 1, updatedAt: new Date().toISOString() });
+    playSfx("duplicate");
     toast("🪙", "Repetida sumada", `${id} ahora tiene ${current.duplicates + 1}.`);
   }
 
@@ -1162,6 +1294,15 @@
   }
 
   function bindEvents() {
+    // Unlock SFX on first real user gesture (helps iOS/Safari + delayed long-press sound).
+    const unlockOnce = () => {
+      unlockSfxOnce();
+      document.removeEventListener("pointerdown", unlockOnce, true);
+      document.removeEventListener("keydown", unlockOnce, true);
+    };
+    document.addEventListener("pointerdown", unlockOnce, true);
+    document.addEventListener("keydown", unlockOnce, true);
+
     // Tabs (filters)
     for (const btn of els.tabs || []) {
       btn.addEventListener("click", () => {
@@ -1220,6 +1361,7 @@
         pressState.timer = setTimeout(() => {
           pressState.didLongPress = true;
           tile.classList.add("is-pressing");
+          playSfx("pop");
           openStickerModal(id);
         }, LONG_PRESS_MS);
       });
@@ -1243,7 +1385,10 @@
         if (!tile) return;
         e.preventDefault();
         const id = tile.getAttribute("data-sticker-id");
-        if (id) openStickerModal(id);
+        if (id) {
+          playSfx("pop");
+          openStickerModal(id);
+        }
       });
 
       els.albumView.addEventListener("click", (e) => {
@@ -1323,6 +1468,15 @@
       if (action === "reset-all") {
         resetProgress();
         return;
+      }
+    });
+
+    document.addEventListener("change", (e) => {
+      const t = e.target;
+      if (!(t instanceof HTMLInputElement)) return;
+      if (t.id === "soundToggle") {
+        setSoundEnabled(t.checked);
+        toast(t.checked ? "🔊" : "🔇", "Sonidos", t.checked ? "Activados" : "Desactivados");
       }
     });
 
