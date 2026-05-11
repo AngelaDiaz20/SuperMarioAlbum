@@ -600,7 +600,7 @@ body::after {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: -86px;
+  bottom: -94px;
   width: 46%;
   height: 86px;
   border-radius: 0 0 26px 26px;
@@ -1003,6 +1003,25 @@ body::after {
   #searchBtn {
     grid-column: 1 / 2;
   }
+  .bottom-nav::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: -94px;
+  width: 65%;
+  height: 86px;
+  border-radius: 0 0 26px 26px;
+  background: linear-gradient(180deg, #52c945 0%, #269a22 55%, #176f18 100%);
+  border-left: 5px solid #145d18;
+  border-right: 5px solid #145d18;
+  border-bottom: 5px solid #145d18;
+  box-shadow:
+    inset 0 8px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -8px 0 rgba(0, 0, 0, 0.18);
+  z-index: 1;
+  pointer-events: none;
+}
 }
 
 @media (prefers-reduced-motion: reduce) {
